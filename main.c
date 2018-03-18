@@ -7,7 +7,9 @@
 #include <sys/mman.h>
 #include "hwlib.h"
 #include "socal/socal.h"
-#include "socal/hps.h"
+// located in /embedded/ip/altera/hps/altera_hps/hwlibs/include/soc_cv_av/socal
+// in hps.h we can find the variables for the offset addresses of Lightweight and normal axi bus
+#include "socal/hps.h"	
 #include "socal/alt_gpio.h"
 #include "hps_0.h"
 
@@ -29,10 +31,10 @@
 #define DEFAULT_LEVEL 2
 
 #define MIPI_REG_PHYClkCtl		0x0056
-#define MIPI_REG_PHYData0Ctl	0x0058
-#define MIPI_REG_PHYData1Ctl	0x005A
-#define MIPI_REG_PHYData2Ctl	0x005C
-#define MIPI_REG_PHYData3Ctl	0x005E
+#define MIPI_REG_PHYData0Ctl		0x0058
+#define MIPI_REG_PHYData1Ctl		0x005A
+#define MIPI_REG_PHYData2Ctl		0x005C
+#define MIPI_REG_PHYData3Ctl		0x005E
 #define MIPI_REG_PHYTimDly		0x0060
 #define MIPI_REG_PHYSta			0x0062
 #define MIPI_REG_CSIStatus		0x0064
@@ -175,13 +177,24 @@ bool MIPI_Init(void){
 
 
 
-uint32_t calc_address(uint32_t base_address){
+uint32_t calc_lw_address(uint32_t base_address){
 	return ( ( unsigned long  )( ALT_LWFPGASLVS_OFST + base_address ) & ( unsigned long)( HW_REGS_MASK ) );
 	//h2p_lw_mix_addr=virtual_base + ( ( unsigned long  )( ALT_LWFPGASLVS_OFST + ALT_VIP_MIX_0_BASE ) & ( unsigned long)( HW_REGS_MASK ) );
 	// 			virtual base: 0x72e23000,  		 alt_lwfpga_ofst: 0xff200000,  led_pio_base: 0x10040,  hardware_regs_mask: : 0x3ffffff
 	//																 	FF210040 & 3ffffff
 	//																		  3210040
 }
+
+
+uint32_t calc_address(uint32_t base_address){
+	return ( ( unsigned long  )( ALT_H2F_OFSTs + base_address ) & ( unsigned long)( HW_REGS_MASK ) );
+	//h2p_lw_mix_addr=virtual_base + ( ( unsigned long  )( ALT_LWFPGASLVS_OFST + ALT_VIP_MIX_0_BASE ) & ( unsigned long)( HW_REGS_MASK ) );
+	// 			virtual base: 0x72e23000,  		 alt_lwfpga_ofst: 0xff200000,  led_pio_base: 0x10040,  hardware_regs_mask: : 0x3ffffff
+	//																 	FF210040 & 3ffffff
+	//																		  3210040
+}
+
+ALT_H2F_OFST
 
 int main() {
 
@@ -202,6 +215,14 @@ int main() {
 	void *h2p_lw_frame_reader;
 	
 	
+
+	void   *h2f_axi_master     = NULL;
+	size_t h2f_axi_master_span = ALT_FPGASLVS_UB_ADDR - ALT_FPGASLVS_LB_ADDR + 1;
+	size_t h2f_axi_master_ofst = ALT_FPGASLVS_OFST;
+
+	void *sdram_data = NULL;
+	
+
 	reg1 = 0;
 	uint16_t mix_data;
 	uint32_t led_data = 0x0;
@@ -216,27 +237,58 @@ int main() {
 	virtual_base = mmap( NULL, HW_REGS_SPAN, ( PROT_READ | PROT_WRITE ), MAP_SHARED, fd, HW_REGS_BASE );
 
 	if( virtual_base == MAP_FAILED ) {
-		printf( "ERROR: mmap() failed...\n" );
+		printf( "ERROR: lightweight mmap() failed...\n" );
 		close( fd );
 		return( 1 );
 	}
 	
 	
-	h2p_lw_led_addr		= virtual_base + calc_address(LED_BASE);		
-	h2p_lw_mipi_pwdn_n	= virtual_base + calc_address(MIPI_PWDN_N_BASE);
-	h2p_lw_mipi_rest_n	= virtual_base + calc_address(MIPI_RESET_N_BASE);
-	h2p_lw_mix_addr		= virtual_base + calc_address(ALT_VIP_MIX_0_BASE);
-	//h2p_lw_auto_focus	= virtual_base + calc_address(TERASIC_AUTO_FOCUS_0_BASE);
-	h2p_lw_mipi_camera	= virtual_base + calc_address(I2C_OPENCORES_CAMERA_BASE);
-	h2p_lw_mipi_contrlr	= virtual_base + calc_address(I2C_OPENCORES_MIPI_BASE);
-	h2p_lw_frame_reader = virtual_base + calc_address(ALT_VIP_VFR_0_BASE);
-	//h2p_lw_pio_reset_n	= virtual_base + calc_address(PIO_RESET_BASE);
+	h2p_lw_led_addr		= virtual_base + calc_lw_address(LED_BASE);		
+	h2p_lw_mipi_pwdn_n	= virtual_base + calc_lw_address(MIPI_PWDN_N_BASE);
+	h2p_lw_mipi_rest_n	= virtual_base + calc_lw_address(MIPI_RESET_N_BASE);
+	h2p_lw_mix_addr		= virtual_base + calc_lw_address(ALT_VIP_CL_MIXER_0_BASE);
+	//h2p_lw_auto_focus	= virtual_base + calc_lw_address(TERASIC_AUTO_FOCUS_0_BASE);
+	h2p_lw_mipi_camera	= virtual_base + calc_lw_address(I2C_OPENCORES_CAMERA_BASE);
+	h2p_lw_mipi_contrlr	h2f_axi_master= virtual_base + calc_lw_address(I2C_OPENCORES_MIPI_BASE);
+	//h2p_lw_frame_reader = virtual_base + calc_lw_address(ALT_VIP_VFR_0_BASE);
+	//h2p_lw_pio_reset_n	= virtual_base + calc_lw_address(PIO_RESET_BASE);
 
-	
-	for(i=0; i<20; i++){
-		mix_data = IO_16_read(h2p_lw_frame_reader,i);
-		printf("Frame Reader data register %d: 0x%x \n",i,mix_data);
+
+	//-----------------------------------------------15-04-18---------------------------
+
+	h2f_axi_master = mmap( NULL, h2f_axi_master_span, ( PROT_READ | PROT_WRITE ), MAP_SHARED, fd, h2f_axi_master_ofst );
+
+	if( h2f_axi_master == MAP_FAILED ) {
+		printf( "ERROR: AXI Bridge mmap() failed...\n" );
+		close( fd );
+		return( 1 );
 	}
+
+	sdram_data	= h2f_axi_master + SDRAM_BASE;	
+	int width=640;
+	int height=480;
+	//Mat frame[width][height];
+	//1D array???
+	
+	
+	/****** 2d array structure************
+	int** a = new int*[rowCount];
+for(int i = 0; i < rowCount; ++i)
+    a[i] = new int[colCount];
+	
+	***************************/
+	
+	int x;
+	int y;
+	for(x=0; i<640; i++){
+		for(y=0; y<480; y++){
+			mix_data = IORD(sdram_data,i);
+		}
+		//printf("Frame Reader data register %d: 0x%x \n",i,mix_data);
+	}
+
+
+	//-----------------------------------------------15-04-18---------------------------
 	
 	printf("\nInitializing Mixer...\n");
 	
@@ -247,7 +299,7 @@ int main() {
 	
 
 	 for(i=0; i<20; i++){
-		mix_data = IO_16_read(h2p_lw_mix_addr,i);
+		mix_data = IORD(h2p_lw_mix_addr,i);
 		printf("Mix data register %d: 0x%x \n",i,mix_data);
 	}
 	 
